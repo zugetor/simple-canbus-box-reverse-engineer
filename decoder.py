@@ -19,6 +19,7 @@ func_id_map = {
     48: "CanVersion",
     49: "AMPState",
     50: "SystemInfo",
+    65: "CarInfo",
     
     # Request from headunit
     192: "Media Settings",
@@ -329,9 +330,74 @@ def decode_oil_electricity_info(data):
     
     return eCUInfo
 
+def decode_car_info(data):
+    if len(data) < 7:
+        print("❌ Data too short for CarInfo (mode 1)")
+        return
+
+    mode = data[0]
+    print(f"CarInfo Mode: {mode}")
+
+    if mode == 1:
+        car_info = {
+            "Handbrake":      (data[2] >> 4) & 1,
+            "DippedHeadlight":(data[4] >> 7) & 1,
+            "HighBeam":       (data[4] >> 6) & 1,
+            "LampWidthLight": (data[4] >> 5) & 1,
+            "BackLight":      (data[5] >> 7) & 1,
+            "BrakeLight":     (data[5] >> 6) & 1,
+            "RightTurnSignal":(data[5] >> 5) & 1,
+            "LeftTurnSignal": (data[5] >> 4) & 1,
+            "CautionLight":   (data[5] >> 3) & 1,
+            "AfterFogLamps":  (data[5] >> 2) & 1,
+            "BeforeFogLamps": (data[5] >> 1) & 1,
+            "BackDoorLock":   (data[6] >> 2) & 0b11,
+            "FrontRightDoorLock": (data[6] >> 1) & 1,
+            "FrontLeftDoorLock": data[6] & 1,
+        }
+
+        print("CarInfo (Mode 1) decoded:")
+        for k, v in car_info.items():
+            print(f"  {k}: {v}")
+
+    elif mode == 2:
+        if len(data) < 16:
+            print("❌ Data too short for CarInfo (mode 2)")
+            return
+
+        car_info = {
+            "DrivingMile":         byte_arr_to_int(data, 1, 3, False),
+            "CanDriverMileage":    byte_arr_to_int(data, 4, 2, False),
+            "TRIPAMile":           byte_arr_to_int(data, 6, 3, False) * 0.1,
+            "TRIPBMile":           byte_arr_to_int(data, 9, 3, False) * 0.1,
+            "InstantanSpeed":      int(byte_arr_to_int(data, 12, 2, False) * 0.01),
+            "EquallySpeed":        int(byte_arr_to_int(data, 14, 2, False) * 0.1),
+        }
+
+        print("CarInfo (Mode 2) decoded:")
+        for k, v in car_info.items():
+            print(f"  {k}: {v}")
+
+    elif mode == 3:
+        if len(data) < 8:
+            print("❌ Data too short for CarInfo (mode 3)")
+            return
+
+        car_info = {
+            "EngineSpeed": byte_arr_to_int(data, 1, 2, False),
+            "OutsideTemp": f"{data[7]}℃",
+        }
+
+        print("CarInfo (Mode 3) decoded:")
+        for k, v in car_info.items():
+            print(f"  {k}: {v}")
+
+    else:
+        print(f"❌ Unknown CarInfo mode: {mode}")
+
 def decode_data_request(data):
     if len(data) < 2:
-        print("❌ Data too short for OilElectricityInfo")
+        print("❌ Data too short for data request")
         return
 
     byte0 = data[0]
@@ -355,7 +421,7 @@ def decode_data_request(data):
 
 def decode_ac_setting(data):
     if len(data) < 2:
-        print("❌ Data too short for OilElectricityInfo")
+        print("❌ Data too short for A/C Setting")
         return
 
     byte0 = data[0]
@@ -427,12 +493,14 @@ def decode_packet(packet):
             decode_swc_angle(data)
         if func_id == 130:
             decode_ac_setting(data)
-        # print()
+        if func_id == 65:
+            decode_car_info(data)
+        print()
     except Exception:
         print(packet)
 
 # Open COM7 at 38400 baudrate
-ser = serial.Serial('COM7', 38400, timeout=1)
+ser = serial.Serial('COM4', 38400, timeout=1)
 
 try:
     buffer = []
